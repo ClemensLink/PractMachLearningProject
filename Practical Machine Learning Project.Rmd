@@ -1,0 +1,142 @@
+## Practical Machine Learning Course Project
+
+### Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+In this project, our goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+### The Task
+
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases. 
+
+### Loading Data
+
+Let's first download the data into local files. There are two data sets, the training data set and the testing data set we are attempting to perform the predictions from the final model on.
+
+```{r}
+# Download data
+setwd("C:/Cle/PracticalMachineLearning")
+train_data_url <- 'https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv'
+#download.file(url = train_data_url, destfile = 'pml-training.csv')
+test_data_url <- 'https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv'
+#download.file(url = test_data_url, destfile = 'pml-testing.csv')
+
+# Input data
+train_data <- read.csv(file = 'pml-training.csv', na.strings=c("NA",""), header=TRUE)
+cnames_train <- colnames(train_data)
+test_data <- read.csv(file = 'pml-testing.csv', na.strings=c("NA",""), header=TRUE)
+cnames_test <- colnames(test_data)
+
+# Verify that the column names (excluding classe and problem_id) are identical in the training and test data set
+all.equal(cnames_train[1:length(cnames_train)-1], cnames_test[1:length(cnames_train)-1])
+```
+
+### Preparing Data
+
+Let's eliminate both NA columns and other extraneous columns.
+
+```{r}
+# Count the number of non-NAs in each col.
+nonNAs <- function(x) {
+    as.vector(apply(x, 2, function(x) length(which(!is.na(x)))))
+}
+
+# Build vector of missing data or NA columns to drop.
+colcnts <- nonNAs(train_data)
+drops <- c()
+for (cnt in 1:length(colcnts)) {
+    if (colcnts[cnt] < nrow(train_data)) {
+        drops <- c(drops, cnames_train[cnt])
+    }
+}
+
+# Drop NA data and the first 7 columns as they're unnecessary for predicting.
+train_data <- train_data[,!(names(train_data) %in% drops)]
+train_data <- train_data[,8:length(colnames(train_data))]
+
+test_data <- test_data[,!(names(test_data) %in% drops)]
+test_data <- test_data[,8:length(colnames(test_data))]
+```
+
+We have a large training data set with 19,622 entries and a small testing data set with only 20 entries.
+
+```{r}
+dim(train_data)
+dim(test_data)
+```
+
+Instead of performing the algorithm on the entire training set, as it would be time consuming and wouldn't allow for an attempt on a testing set, I chose to divide the given training set into four roughly equal sets, each of which was then split into a training set (comprising 60% of the entries) and a testing set (comprising 40% of the entries).
+
+### Prediction with Random Forest Algorithm
+
+Based on what we've learned and discussed in the course, I decided to choose random forest from the caret package (method = rf) with cross validation and without(2.) / with(3.) preprocessing for my predictions.
+
+```{r}
+library(caret)
+```
+
+#### 1. Divide the training data set into training (60%) and test (40%) set.
+
+```{r}
+set.seed(1111)
+inTrain <- createDataPartition(y=train_data$classe, p=0.6, list=FALSE)
+trainset <- train_data[inTrain,]
+testset <- train_data[-inTrain,]
+```
+
+#### 2a. Train on training data set with only cross validation.
+
+```{r}
+set.seed(1111)
+modFit <- train(trainset$classe ~ ., method="rf", trControl=trainControl(method = "cv", number = 4), data=trainset)
+print(modFit, digits=3)
+```
+
+#### 2b. Run against the 40% testing data set
+
+```{r}
+predictions <- predict(modFit, newdata=testset)
+print(confusionMatrix(predictions, testset$classe), digits=4)
+```
+
+#### 2c. Run against the official testing data sets
+
+```{r}
+print(predict(modFit, newdata=test_data))
+```
+
+#### 3a. Train on training data set with both preprocessing and cross validation.
+
+```{r}
+# set.seed(1111)
+# modFit <- train(trainset$classe ~ ., method="rf", preProcess=c("center", "scale"), trControl#Z=trainControl(method = "cv", number = 4), data=trainset)
+# print(modFit, digits=3)
+```
+
+#### 3b. Run against the 40% testing data set.
+
+```{r}
+# predictions <- predict(modFit, newdata=testset)
+# print(confusionMatrix(predictions, testset$classe), digits=4)
+```
+
+#### 3c. Run against the testing data set
+
+```{r}
+# print(predict(modFit, newdata=testset))
+```
+
+I've set the preprocessing steps in comment tags because it took sooo long. Actually it lowered the accuracy rate from 0.9897 (crossvalidation only) to 0.9874 against the training set.
+
+### Out of Sample Error
+
+According to what we've learned in week 1 “In and out of sample errors”, the out of sample error is the “error rate you get on new data set.” In my case, it's the error rate after running the predict() function on the testing set:
+
+Random Forest (cross validation without preprocessiong): 1 - 0.9897 = 0.0103
+
+### Conclusion
+
+Such a small out of sample rate of 0.0103 could be expected because of the lot we learned in the class. With an accuracy of 0.9864 I was keen to use **exactly this prediction [B A B A A E D B A A B C B A E E A B B B]** for the 20 submittions and guess what, all worked perfectly fine. 
+
+I'm so happy and proud about that :)
